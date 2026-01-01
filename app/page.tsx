@@ -434,7 +434,7 @@ export default function Home() {
       // ignore
     }
   }, []);
-  
+
   // ---------- RETURNING USER (one-time) ----------
   useEffect(() => {
     try {
@@ -537,12 +537,24 @@ export default function Home() {
       usddd,
       usdddMinted,
       usdddSpent,
+      usdddBurned,
       usdddTransferred,
       digCount,
       ledger,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(st));
-  }, [hasCompletedIntro, introRewards, usddd, usdddMinted, usdddSpent, usdddTransferred, digCount, ledger]);
+  }, [
+    hasCompletedIntro,
+    introRewards,
+    usddd,
+    usdddMinted,
+    usdddSpent,
+    usdddBurned,
+    usdddTransferred,
+    digCount,
+    ledger,
+  ]);
+
 
   useEffect(() => {
     localStorage.setItem(ABUSE_KEY, JSON.stringify(abuse));
