@@ -194,7 +194,7 @@ const STORAGE_VERSION = 2;
 const ABUSE_KEY = "digdugdo_abuse_v1";
 
 // dapp version
-const DAPP_VERSION = "0.2.12";
+const DAPP_VERSION = "0.2.13";
 
 // ---------- ADMIN ----------
 const ADMIN_PIN = process.env.NEXT_PUBLIC_ADMIN_PIN || "123456";
@@ -214,7 +214,7 @@ type PersistedState = {
   usdddMinted: number;
   usdddSpent: number;
   usdddTransferred: number;
-  usdddBurned?: number;
+  usdddBurned: number;
   digCount: number;
   ledger: Ledger;
 };
@@ -434,6 +434,23 @@ export default function Home() {
       // ignore
     }
   }, []);
+  
+  // ---------- RETURNING USER (one-time) ----------
+  useEffect(() => {
+    try {
+      const hasVisited = localStorage.getItem("ddd_has_visited") === "1";
+      const shown = localStorage.getItem("ddd_welcome_back_shown") === "1";
+
+      if (hasVisited && !shown) {
+        showToast("Welcome back, digger.", "info", 2200);
+        localStorage.setItem("ddd_welcome_back_shown", "1");
+      }
+
+      localStorage.setItem("ddd_has_visited", "1");
+    } catch {
+      // ignore
+    }
+  }, []);
 
   // ---------- USERNAME (local identity) ----------
   useEffect(() => {
@@ -456,14 +473,9 @@ export default function Home() {
   useEffect(() => {
     try {
       localStorage.setItem(SITE_LIVE_KEY, siteLive ? "1" : "0");
-    } catch {}
+    } catch { }
   }, [siteLive]);
 
-
-  // ambient sound (optional)
-  const [soundOn, setSoundOn] = useState(false);
-  const windAudioRef = useRef<HTMLAudioElement | null>(null);
-  const blipAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // anti-abuse state
   const [abuse, setAbuse] = useState<AbuseState>(defaultAbuseState());
@@ -515,95 +527,17 @@ export default function Home() {
     }
   }, []);
 
-  // ---------- AUDIO (optional; requires user interaction) ----------
-  useEffect(() => {
-    // These files should exist in /public/sfx in production builds.
-    // If they don't, the UI still works (audio simply won't play).
-    try {
-      windAudioRef.current = new Audio("/sfx/wind.mp3");
-      windAudioRef.current.loop = true;
-      windAudioRef.current.volume = 0;
-
-      blipAudioRef.current = new Audio("/sfx/blip.mp3");
-      blipAudioRef.current.loop = false;
-      blipAudioRef.current.volume = 0.35;
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  function fadeAudio(a: HTMLAudioElement | null, target: number, ms = 450) {
-    if (!a) return;
-    const start = a.volume ?? 0;
-    const steps = 18;
-    const stepMs = Math.max(16, Math.floor(ms / steps));
-    let i = 0;
-    const t = setInterval(() => {
-      i++;
-      const v = start + ((target - start) * i) / steps;
-      a.volume = Math.max(0, Math.min(1, v));
-      if (i >= steps) clearInterval(t);
-    }, stepMs);
-  }
-
-  async function enableSound() {
-    const wind = windAudioRef.current;
-    if (!wind) return;
-    try {
-      // Some browsers require play() to be called from a user gesture.
-      await wind.play();
-      fadeAudio(wind, 0.15, 550);
-      setSoundOn(true);
-    } catch {
-      // ignore (user gesture not granted)
-      setSoundOn(false);
-    }
-  }
-
-  function disableSound() {
-    const wind = windAudioRef.current;
-    if (!wind) {
-      setSoundOn(false);
-      return;
-    }
-    fadeAudio(wind, 0, 350);
-    setTimeout(() => {
-      try {
-        wind.pause();
-        wind.currentTime = 0;
-      } catch { }
-    }, 420);
-    setSoundOn(false);
-  }
-
-  function toggleSound() {
-    if (soundOn) disableSound();
-    else enableSound();
-  }
-
-  function playBlip() {
-    if (!soundOn) return;
-    const b = blipAudioRef.current;
-    if (!b) return;
-    try {
-      b.currentTime = 0;
-      void b.play();
-    } catch {
-      // ignore
-    }
-  }
-
   // ---------- PERSIST ON CHANGE ----------
   useEffect(() => {
     const st: PersistedState = {
       v: STORAGE_VERSION,
       hasCompletedIntro,
       introRewards,
+
       usddd,
       usdddMinted,
       usdddSpent,
       usdddTransferred,
-      usdddBurned: 0,
       digCount,
       ledger,
     };
@@ -747,7 +681,7 @@ export default function Home() {
     try {
       localStorage.setItem(SITE_LIVE_KEY, "0");
       sessionStorage.removeItem(PREVIEW_BYPASS_KEY);
-    } catch {}
+    } catch { }
     setSiteLive(false);
     setPreviewBypass(false);
   }
@@ -825,7 +759,6 @@ export default function Home() {
       showToast("Vein exhausted. New treasures appear soon.", "warn", 2800);
     }
 
-    playBlip();
     setScreen("digging");
   }
 
@@ -839,7 +772,6 @@ export default function Home() {
         if (s <= 1) {
           window.clearInterval(t);
           setScreen("success");
-          playBlip();
 
           if (selected) {
             // reward at end (mock)
@@ -890,7 +822,7 @@ export default function Home() {
         onBypass={() => {
           try {
             sessionStorage.setItem(PREVIEW_BYPASS_KEY, "1");
-          } catch {}
+          } catch { }
           setPreviewBypass(true);
           setScreen("start");
         }}
@@ -918,11 +850,10 @@ export default function Home() {
             onWithdraw={goWithdraw}
             onStats={goStats}
             onIntro={goIntroReplay}
-            onToggleSound={toggleSound}
-            soundOn={soundOn}
             isStats={screen === "stats"}
             username={username}
             onProfile={() => setScreen("profile")}
+            operatorMode={adminAuthed}
           />
 
           {isIntro && (
@@ -1001,7 +932,7 @@ export default function Home() {
                 setUsername(next);
                 try {
                   localStorage.setItem(USERNAME_KEY, next);
-                } catch {}
+                } catch { }
               }}
               onBack={() => setScreen("feed")}
             />
@@ -1308,11 +1239,10 @@ function Header({
   onWithdraw,
   onStats,
   onIntro,
-  onToggleSound,
-  soundOn,
   isStats,
   username,
   onProfile,
+  operatorMode,
 }: {
   wallet: WalletState | null;
   usddd: number;
@@ -1321,12 +1251,12 @@ function Header({
   onWithdraw: () => void;
   onStats: () => void;
   onIntro: () => void;
-  onToggleSound: () => void;
-  soundOn: boolean;
   isStats: boolean;
   username: string;
   onProfile: () => void;
+  operatorMode: boolean;
 }) {
+
   const pillBase =
     "rounded-2xl border px-4 py-2 text-[11px] font-semibold tracking-wide transition hover:border-amber-200/35 active:scale-[0.99]";
   const pillIdle = "border-amber-200/18 bg-neutral-950/25 text-amber-100/85";
@@ -1347,7 +1277,15 @@ function Header({
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="text-xs tracking-[0.35em] text-amber-200/80">DIGDUG.DO</div>
+                <div className="flex items-center gap-2">
+                  <div className="text-xs tracking-[0.35em] text-amber-200/80">DIGDUG.DO</div>
+                  {operatorMode && (
+                    <div className="rounded-full border border-amber-200/25 bg-neutral-950/35 px-2 py-0.5 text-[9px] font-semibold tracking-[0.22em] text-amber-100/90">
+                      OPERATOR
+                    </div>
+                  )}
+                </div>
+
                 <div className="mt-1 text-sm text-amber-50 font-semibold">Dig For Treasure Drops</div>
                 <div className="mt-1 text-[10px] text-amber-200/50">Powered by USDDD</div>
               </div>
@@ -1373,14 +1311,6 @@ function Header({
 
               <button onClick={onStats} className={`${pillBase} ${isStats ? pillActive : pillIdle}`} title="Stats & proof">
                 Stats
-              </button>
-
-              <button
-                onClick={onToggleSound}
-                className={`${pillBase} ${pillIdle}`}
-                title={soundOn ? "Sound on" : "Sound off"}
-              >
-                {soundOn ? "🔊" : "🔇"}
               </button>
 
               <button onClick={onIntro} className={`${pillBase} ${pillIdle}`} title="Replay intro">
@@ -1418,6 +1348,22 @@ function ComingSoonScreen({
   onBypass: () => void;
 }) {
   const [taps, setTaps] = useState(0);
+
+  const microCopy = [
+    "Treasure drops are being calibrated.",
+    "Early diggers get first pick.",
+    "Next drop is closer than you think.",
+  ];
+  const [microIdx, setMicroIdx] = useState(0);
+
+  useEffect(() => {
+    const t = window.setInterval(
+      () => setMicroIdx((i) => (i + 1) % microCopy.length),
+      3600
+    );
+    return () => window.clearInterval(t);
+  }, []);
+
   return (
     <div className="min-h-screen w-full bg-[#050505] text-amber-50">
       <BackgroundFX />
@@ -1438,8 +1384,9 @@ function ComingSoonScreen({
           <div className="mt-8 text-center">
             <div className="text-4xl font-semibold tracking-tight">Coming Soon</div>
             <div className="mt-3 text-sm text-amber-200/70">
-              Treasure drops are being prepared. Early diggers get the edge.
+              {microCopy[microIdx]}
             </div>
+
           </div>
 
           <div className="mt-8">
@@ -2627,7 +2574,7 @@ function AdminScreen({
         </div>
       </div>
 
-      <div className="rounded-2xl bg-neutral-950/35 border border-amber-200/12 p-4">
+      <div className="rounded-2xl bg-neutral-950/35 border border-amber-200/12 p-4 space-y-4">
         <div className="rounded-2xl border border-amber-200/12 bg-neutral-950/30 p-4">
           <div className="text-sm font-semibold">Site controls</div>
           <div className="mt-3 flex items-center justify-between gap-3">
@@ -2659,22 +2606,46 @@ function AdminScreen({
           </div>
         </div>
 
-        <div className="text-sm font-semibold">USDDD controls (mock)</div>
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <div className="text-[11px] text-amber-200/70">Mint credits</div>
-            <input className={input} type="number" min={0} step={0.01} value={mintAmt} onChange={(e) => setMintAmt(Number(e.target.value))} />
-            <button className={btnPrimary} onClick={mintCredits}>Mint</button>
+        <div className="rounded-2xl border border-amber-200/12 bg-neutral-950/30 p-4">
+          <div className="text-sm font-semibold">USDDD controls (mock)</div>
+
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <div className="text-[11px] text-amber-200/70">Mint credits</div>
+              <input
+                className={input}
+                type="number"
+                min={0}
+                step={0.01}
+                value={mintAmt}
+                onChange={(e) => setMintAmt(Number(e.target.value))}
+              />
+              <button className={btnPrimary} onClick={mintCredits}>
+                Mint
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-[11px] text-amber-200/70">Burn credits</div>
+              <input
+                className={input}
+                type="number"
+                min={0}
+                step={0.01}
+                value={burnAmt}
+                onChange={(e) => setBurnAmt(Number(e.target.value))}
+              />
+              <button className={btn} onClick={burnCredits}>
+                Burn
+              </button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <div className="text-[11px] text-amber-200/70">Burn credits</div>
-            <input className={input} type="number" min={0} step={0.01} value={burnAmt} onChange={(e) => setBurnAmt(Number(e.target.value))} />
-            <button className={btn} onClick={burnCredits}>Burn</button>
+
+          <div className="mt-3 text-[11px] text-amber-200/55">
+            Note: Mint/Burn is UI-only in this demo. Later we swap to wallet-based operator auth + onchain/admin calls.
           </div>
         </div>
-        <div className="mt-3 text-[11px] text-amber-200/55">
-          Note: Mint/Burn is UI-only in this demo. Later we swap to wallet-based operator auth + onchain/admin calls.
-        </div>
+
       </div>
 
       <div className="rounded-2xl bg-neutral-950/35 border border-amber-200/12 p-4">
